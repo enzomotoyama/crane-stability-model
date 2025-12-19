@@ -136,6 +136,7 @@ if ans == "yes":
 
     print("\nsafe speeds for radius (in m/s) =", radius[i], ":", safe_speeds)
 
-    path = r"C:\Users\enzo.motoyama\Documents\crane_simulation\crane_vmax.sqlite"
+    path = "data/crane_vmax.sqlite"
     plot_s_b_vs_vmax(path, i = 0)
+
 

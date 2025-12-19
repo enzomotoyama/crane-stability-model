@@ -1,84 +1,3 @@
-"""
-import numpy as np
-
-def a_phi(phi, x_cog, z_cog, width):
-    a_init = width/2 - x_cog
-    h_init = z_cog
-    return a_init*np.cos(phi) + h_init*np.sin(phi) 
-
-def h_phi(phi, x_cog, z_cog, width):
-    a_init = width/2 - x_cog
-    h_init = z_cog
-    return -a_init*np.sin(phi) + h_init*np.cos(phi)
-
-def Fb(t, F0, Tend):
-    if t < Tend:
-        return F0*(1 - t/Tend)
-    return 0.0
-
-def make_F(Tend, m, F0, g, r):
-    a_init = width/2 - x_cog
-    h_init = z_cog
-    phi_init = np.arctan2(h_init, a_init)
-
-    def F(t, y):
-        phi_model, dphi = y
-        Fb_t = Fb(t, F0, Tend)
-        phi_tot = phi_model + phi_init
-        ddphi = (Fb_t * r * np.sin(phi)) / m * r        return np.array([dphi, ddphi])
-
-    return F
-
-def itRK4(F, dt, t, y):
-    k1 = dt * F(t, y)
-    k2 = dt * F(t + dt/2, y + k1/2)
-    k3 = dt * F(t + dt/2, y + k2/2)
-    k4 = dt * F(t + dt,   y + k3)
-    return y + (k1 + 2*k2 + 2*k3 + k4) / 6
-
-def rk4(F, dt, Tend, x_cog, z_cog, width):
-    a_init = width/2 - x_cog
-    h_init = z_cog
-    phi_init = np.arctan2(h_init, a_init)
-
-    print("initial angle : ", np.degrees(phi_init))
-
-    times = []
-    phi_phys_list = []
-    phi_model_list = []
-    dphi_list = []
-
-    t = 0.0
-    y = np.array([0.0, 0.0])
-    t_tip = None
-
-    while t <= Tend:
-        phi_model, dphi = y
-        phi_tot = phi_model + phi_init
-        phi_phys = np.degrees(phi_tot)
-
-        times.append(t)
-        phi_phys_list.append(phi_phys)
-        phi_model_list.append(phi_model)
-        dphi_list.append(dphi)
-
-        a_cur = a_phi(phi_tot, x_cog, z_cog, width)
-        if t_tip is None and a_cur <= 0.0:
-            t_tip = t
-            break
-
-        y = itRK4(F, dt, t, y)
-        t += dt
-
-    print(phi_model_list[-1])
-
-    return (np.array(times), 
-            np.array(phi_phys_list),
-            np.array(phi_model_list),
-            np.array(dphi_list),
-            t_tip)
-"""
-
 import numpy as np
 
 def a_phi(phi, x_cog, z_cog, width):
@@ -178,3 +97,4 @@ def rk4(F, dt, Tsim, x_cog, z_cog, width):
         np.array(dphi_list),
         t_tip
     )
+

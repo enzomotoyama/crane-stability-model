@@ -1,0 +1,180 @@
+"""
+import numpy as np
+
+def a_phi(phi, x_cog, z_cog, width):
+    a_init = width/2 - x_cog
+    h_init = z_cog
+    return a_init*np.cos(phi) + h_init*np.sin(phi) 
+
+def h_phi(phi, x_cog, z_cog, width):
+    a_init = width/2 - x_cog
+    h_init = z_cog
+    return -a_init*np.sin(phi) + h_init*np.cos(phi)
+
+def Fb(t, F0, Tend):
+    if t < Tend:
+        return F0*(1 - t/Tend)
+    return 0.0
+
+def make_F(Tend, m, F0, g, r):
+    a_init = width/2 - x_cog
+    h_init = z_cog
+    phi_init = np.arctan2(h_init, a_init)
+
+    def F(t, y):
+        phi_model, dphi = y
+        Fb_t = Fb(t, F0, Tend)
+        phi_tot = phi_model + phi_init
+        ddphi = (Fb_t * r * np.sin(phi)) / m * r        return np.array([dphi, ddphi])
+
+    return F
+
+def itRK4(F, dt, t, y):
+    k1 = dt * F(t, y)
+    k2 = dt * F(t + dt/2, y + k1/2)
+    k3 = dt * F(t + dt/2, y + k2/2)
+    k4 = dt * F(t + dt,   y + k3)
+    return y + (k1 + 2*k2 + 2*k3 + k4) / 6
+
+def rk4(F, dt, Tend, x_cog, z_cog, width):
+    a_init = width/2 - x_cog
+    h_init = z_cog
+    phi_init = np.arctan2(h_init, a_init)
+
+    print("initial angle : ", np.degrees(phi_init))
+
+    times = []
+    phi_phys_list = []
+    phi_model_list = []
+    dphi_list = []
+
+    t = 0.0
+    y = np.array([0.0, 0.0])
+    t_tip = None
+
+    while t <= Tend:
+        phi_model, dphi = y
+        phi_tot = phi_model + phi_init
+        phi_phys = np.degrees(phi_tot)
+
+        times.append(t)
+        phi_phys_list.append(phi_phys)
+        phi_model_list.append(phi_model)
+        dphi_list.append(dphi)
+
+        a_cur = a_phi(phi_tot, x_cog, z_cog, width)
+        if t_tip is None and a_cur <= 0.0:
+            t_tip = t
+            break
+
+        y = itRK4(F, dt, t, y)
+        t += dt
+
+    print(phi_model_list[-1])
+
+    return (np.array(times), 
+            np.array(phi_phys_list),
+            np.array(phi_model_list),
+            np.array(dphi_list),
+            t_tip)
+"""
+
+import numpy as np
+
+def a_phi(phi, x_cog, z_cog, width):
+    a0 = width / 2.0 - x_cog
+    h0 = z_cog
+    r = np.hypot(a0, h0)
+    return r * np.cos(phi)
+
+def h_phi(phi, x_cog, z_cog, width):
+    a0 = width / 2.0 - x_cog
+    h0 = z_cog
+    r = np.hypot(a0, h0)
+    return r * np.sin(phi)
+
+def brake_force(t, m, v0, s_brake):
+    F0 = 0.5 * m * v0**2 / s_brake
+    a = F0 / m
+    t_brake = v0 / a
+    if t < t_brake:
+        return F0
+    return 0.0
+
+def make_F(s_brake, IT, m, v0, x_cog, z_cog, width, g):
+    a0 = width / 2.0 - x_cog
+    h0 = z_cog
+    r = np.hypot(a0, h0)
+
+    def F(t, y):
+        phi, dphi = y
+        Fb_t = brake_force(t, m, v0, s_brake)
+        ddphi = np.cos(phi) * r * (Fb_t * np.tan(phi) - m * g) / IT
+        return np.array([dphi, ddphi], dtype=float)
+
+    return F
+
+def itRK4(F, dt, t, y):
+    k1 = dt * F(t, y)
+    k2 = dt * F(t + dt / 2.0, y + k1 / 2.0)
+    k3 = dt * F(t + dt / 2.0, y + k2 / 2.0)
+    k4 = dt * F(t + dt, y + k3)
+    return y + (k1 + 2.0 * k2 + 2.0 * k3 + k4) / 6.0
+
+def rk4(F, dt, Tsim, x_cog, z_cog, width):
+    a0 = width / 2.0 - x_cog
+    h0 = z_cog
+    phi0 = np.arctan2(h0, a0)
+
+    times = []
+    phi_deg = []
+    phi_list = []
+    dphi_list = []
+
+    t = 0.0
+    y = np.array([phi0, 0.0], dtype=float)
+    t_tip = None
+
+    while t <= Tsim:
+        phi, dphi = y
+        a_cur = a_phi(phi, x_cog, z_cog, width)
+        h_cur = h_phi(phi, x_cog, z_cog, width)
+
+        times.append(t)
+        phi_deg.append(np.degrees(np.arctan2(h_cur, a_cur)))
+        phi_list.append(phi)
+        dphi_list.append(dphi)
+
+   
+        if a_cur <= 0.0:
+            t_tip = t
+            break
+
+        y_next = itRK4(F, dt, t, y)
+        a_next = a_phi(y_next[0], x_cog, z_cog, width)
+
+        if (a_cur > 0.0) and (a_next <= 0.0):
+            alpha = a_cur / (a_cur - a_next + 1e-15)
+            t_tip = t + alpha * dt
+            phi_tip = y[0] + alpha * (y_next[0] - y[0])
+
+            times.append(t_tip)
+            phi_deg.append(90.0)
+            phi_list.append(phi_tip)
+            dphi_list.append(y[1] + alpha * (y_next[1] - y[1]))
+
+            break
+
+        if phi_deg[-1] < 80 :
+            break
+
+        y = y_next
+        t += dt
+
+    return (
+        np.array(times),
+        np.array(phi_deg),
+        np.array(phi_list),
+        np.array(dphi_list),
+        t_tip
+    )

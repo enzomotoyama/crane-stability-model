@@ -103,13 +103,13 @@ def plot_monte_carlo(vals, path):
     ymax = ax.get_ylim()[1] * 1.12
     ax.set_ylim(top=ymax)
     ax.text(median, ymax * 0.97, f"  median = {median:.2f} km/h", va="top", ha="left", fontsize=9)
-    ax.text(ISO_LIMIT_KMH, ymax * 0.97, f"  ISO 4305 limit\n  = {ISO_LIMIT_KMH} km/h", va="top", ha="left", fontsize=9)
+    ax.text(ISO_LIMIT_KMH, ymax * 0.97, f"  reference limit\n  = {ISO_LIMIT_KMH} km/h", va="top", ha="left", fontsize=9)
 
     ax.set_xlim(0, np.ceil(vmax_kmh.max()) + 0.5)
     ax.set_xlabel("maximum safe travel speed vmax (km/h)")
     ax.set_ylabel("number of simulations")
     ax.set_title(f"Monte Carlo, R = {vals['radius'][I_MC]:.0f} m, N = {N_MC}, "
-                 f"braking time ~ N({T_MEAN} s, {T_STD} s)")
+                 f"braking time ~ N(μ = {T_MEAN} s, σ = {T_STD} s)")
     ax.grid(True, axis="y", color="0.9", lw=0.6)
 
     fig.savefig(path, dpi=150, bbox_inches="tight")

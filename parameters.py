@@ -1,4 +1,7 @@
+import os
 import numpy as np
+
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crane_vmax.sqlite")
 
 # Disclaimer: These values are fictional and modified for confidentiality.
 # The data structure and code logic are inspired by a real-world internship project at Tadano Europe.

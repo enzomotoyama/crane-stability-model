@@ -1,92 +1,130 @@
 # Crane Stability Model
 
-This project simulates the **braking dynamics of a crawler crane** to determine the **maximum safe speed before tipping**.  
-It uses real-case-inspired data to model the behavior during emergency braking and explore the margins allowed by international standards.
+Dynamic simulation of a crawler crane under emergency braking, used to compute the maximum travel speed the machine can sustain without tipping over.
+
+The model integrates the equations of motion with a fourth-order Runge–Kutta scheme, propagates parameter uncertainty by Monte Carlo simulation, and stores the resulting speed limits in a queryable SQLite database.
 
 ---
 
-## 🚧 Purpose
+## Motivation
 
-> **Main Goal:**  
-To compute the maximum speed at which a crane can brake **without tipping over**, depending on its configuration and radius.
+ISO 4305 caps the travel speed of crawler cranes at **1.1 km/h**. That figure is a static, worst-case bound and says nothing about how much dynamic headroom a given configuration actually has.
 
-This project also helps **evaluate the conservatism** of the ISO 4305 norm, which limits crawler cranes to a travel speed of **1.1 km/h**, while simulations suggest they can safely move at **up to 5 km/h** or more.
+This project reconstructs the braking dynamics explicitly to answer a narrower question: **for a given geometry and load radius, at what speed does tipping actually begin?**
 
----
+On the synthetic configurations tested, with braking times between 1 and 2 seconds, the simulated limit ranges from **3.5 km/h** at a 20 m radius to **7.0 km/h** at a 10 m radius — three to six times the ISO bound. The margin narrows as the load radius grows, which is the expected behaviour: a longer outreach shifts the centre of gravity towards the tipping edge and reduces the restoring moment.
 
-## 📊 Context
+## Method
 
-- Based on **real-world engineering work** conducted during an internship at **Tadano**.
-- For confidentiality reasons, all data (COG, radius, masses, etc.) used in the code are **synthetic and anonymized**.
+| Step | Approach |
+|---|---|
+| Equations of motion | Moment balance about the front tipping edge, inertia modelled as `I_T = m·r²` (`I_G = 0`) |
+| Time integration | Fourth-order Runge–Kutta (RK4) |
+| Tipping criterion | Detection of the crossing between the model angle `phi_model` and the physical tipping angle `phi_phys` |
+| Speed search | Bisection on travel speed, per configuration |
+| Uncertainty propagation | Monte Carlo sampling over the braking time |
+| Result storage | Per-configuration maximum speed written to SQLite, indexed by radius and braking distance/time |
 
----
+The same toolchain — ODE integration, Monte Carlo uncertainty propagation, threshold estimation under parameter uncertainty — is method-agnostic and transfers directly to other domains where a limit has to be estimated from a stochastic model.
 
-## 🧮 Physics & Parameters
+![Angle trajectory during braking at two travel speeds](figures/braking_trajectory.png)
 
-### Key Definitions:
-- `x_cog`, `z_cog` → center of gravity coordinates  
-- `radius` → outreach of the load  
-- `width` → crane base width  
-- `mass_total` → total system mass (structure + load)  
-- `IT = m*r²` → inertia (assuming `IG = 0`)  
-- `phi_model` → angle computed during braking  
-- `phi_phys` → final physical tipping angle  
-- Moments are **positive clockwise**
+*Braking trajectory at a 10 m radius with a 1.5 s braking time. At 5 km/h the crane peaks near 87° and falls back; at 7 km/h it crosses the 90° tipping angle (dotted) at t = 2.86 s, marked by the circle.*
 
-### Motion:
-- The crane moves **right to left**
-- `0` is the **center of the crane** (`width / 2`)
-- Tipping point is at the **front** of the crane
+![Monte Carlo distribution of the maximum safe speed](figures/monte_carlo.png)
 
----
+*Distribution of the maximum safe speed over 400 draws of the braking time (1.5 ± 0.3 s) at a 15 m radius. Median 5.29 km/h, with 90% of draws between 4.65 and 5.99 km/h — well above the 1.1 km/h ISO 4305 limit (dotted).*
 
-## 🧪 Features
+## Model parameters
 
-- **Braking simulation** with RK4 solver
-- **Tipping detection** logic
-- **Monte Carlo simulations** to assess speed uncertainty
-- **Database generation** of safe speeds (`.sqlite`)
-- **Data visualization** of results
+| Symbol | Meaning |
+|---|---|
+| `x_cog`, `z_cog` | Centre-of-gravity coordinates |
+| `radius` | Load outreach |
+| `width` | Crane base width |
+| `mass_total` | Total system mass (structure + load) |
+| `I_T` | Inertia about the tipping edge, `m·r²` |
+| `phi_model` | Rotation angle computed during braking |
+| `phi_phys` | Physical tipping angle |
 
----
+**Conventions.** Moments are counted positive clockwise. The crane travels right to left. The origin is the centre of the base (`width / 2`), and the tipping point is at the front of the machine.
 
-## 📂 Project Structure
+## Project structure
+
+```
+.
+├── main.py              # Entry point: runs simulations interactively
+├── parameters.py        # Crane configuration (COG, masses, geometry)
+├── forces.py            # Braking force and RK4 dynamics
+├── monte_carlo_sim.py   # Monte Carlo uncertainty propagation
+├── create_database.py   # Computes vmax per configuration into SQLite
+├── make_figures.py      # Regenerates the figures in figures/
+├── plotting.py          # Visualisation of trajectories and distributions
+├── crane_vmax.sqlite    # Generated results database (regenerable)
+└── README.md
+```
+
+`create_database.py` writes two tables: `analysis`, indexed by braking distance `s_brake`, and `analysis_time`, indexed by braking time `t_brake`.
+
+## Installation
+
+Requires Python 3.9 or later.
 
 ```bash
-.
-├── main.py              # User interface for running simulations
-├── parameters.py        # Contains crane configuration (COG, mass, etc.)
-├── forces.py            # Computes braking force & dynamics
-├── monte_carlo_sim.py   # Monte Carlo simulation logic
-├── create_database.py   # Computes vmax per config (tables `analysis` by s_brake, `analysis_time` by t_brake)
-├── plotting.py          # Visualization functions
-├── crane_vmax.sqlite    # SQLite database of results
-└── README.md            # This file
-📈 Sample Output
-text
-Copy code
-i=0, R=10.0 m, s_brake=1.0 : vmax=1.613 m/s (5.81 km/h)
-i=1, R=11.0 m, s_brake=1.0 : vmax=1.583 m/s (5.70 km/h)
+git clone https://github.com/enzomotoyama/crane-stability-model.git
+cd crane-stability-model
+pip install -r requirements.txt
+```
+
+Dependencies: NumPy, Pandas, Matplotlib. SQLite is part of the standard library.
+
+## Usage
+
+Run a simulation from the interactive entry point:
+
+```bash
+python main.py
+```
+
+Regenerate the results database across all configurations:
+
+```bash
+python create_database.py
+```
+
+Regenerate the figures:
+
+```bash
+python make_figures.py
+```
+
+### Sample output
+
+```
+i=0,  R=10.0 m, t_brake=1.0 : vmax=1.517 m/s (5.46 km/h)
+i=0,  R=10.0 m, t_brake=1.5 : vmax=1.724 m/s (6.20 km/h)
+i=0,  R=10.0 m, t_brake=2.0 : vmax=1.947 m/s (7.01 km/h)
 ...
-⚙️ Requirements
-Python 3.x
+i=10, R=20.0 m, t_brake=2.0 : vmax=1.293 m/s (4.66 km/h)
+```
 
-NumPy
+The maximum safe speed rises with the available braking time and falls as the load radius increases.
 
-Pandas
+## Data and confidentiality
 
-Matplotlib
+This work was inspired by engineering carried out during an internship at **Tadano Europe (R&D department)**. No proprietary data is included in this repository.
 
-SQLite3 (standard library)
+**Every numerical value in the code — centre of gravity, radii, masses, geometry — is synthetic and anonymised.** The results are therefore illustrative of the method, not of any real machine.
 
-Install packages:
+## Limitations
 
-bash
-Copy code
-pip install numpy pandas matplotlib
-📌 Notes
-This is a non-commercial academic/research project.
+- Rigid-body model: structural flexibility and ground compliance are not represented.
+- Inertia about the centre of gravity is neglected (`I_G = 0`).
+- Planar model — no lateral dynamics, slope, or wind loading.
+- Braking force is modelled as a simplified deceleration profile.
 
-ISO 4305 provides a high safety margin, but our simulations show significant dynamic headroom.
+**This tool must not be used for crane certification or for operational decisions.** It is an academic and research exercise.
 
-Do not use this tool for real crane certification or operational decision
+## License
+
+MIT

@@ -19,7 +19,7 @@ IMPORTANT PARAMETERS :
 """
 import pandas as pd
 import numpy as np
-from parameters import get_values
+from parameters import get_values, DB_PATH
 from forces import make_F, rk4
 from plotting import plot_phi, plot_scatter, plot_s_b_vs_vmax
 
@@ -136,7 +136,6 @@ if ans == "yes":
 
     print("\nsafe speeds for radius (in m/s) =", radius[i], ":", safe_speeds)
 
-    path = "data/crane_vmax.sqlite"
-    plot_s_b_vs_vmax(path, i = 0)
+    plot_s_b_vs_vmax(DB_PATH, i = i)
 
 

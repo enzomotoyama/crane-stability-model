@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
-from create_database import fetch_data
-from forces import make_F, rk4
+from parameters import get_values
+from create_database import compute_vmax_tbrake
 
 SEED = 12345
 RNG  = np.random.default_rng(SEED)
@@ -16,40 +16,15 @@ def sample_t_brake(mean, std, n, rng=RNG, tmin = T_MIN, tmax = T_MAX):
     return np.clip(t, tmin, tmax)
 
 
-def find_vmax(i, t_brake, vals, v_test, Tsim= 15.0, dt = 1e-3):
-    for v0 in reversed(v_test):
-        s_eff = 0.5 * v0 * t_brake
-
-        F = make_F(
-            s_eff,
-            vals["IT"][i],
-            vals["mass_total"][i],
-            v0,
-            vals["x_cog"][i],
-            vals["z_cog"][i],
-            vals["width"],
-            vals["g"]
-        )
-
-        *_, t_tip = rk4(F, dt, Tsim, vals["x_cog"][i], vals["z_cog"][i], vals["width"])
-
-        if t_tip is None:
-            return v0
-
-    return v_test[0]
-
-
-def vmax_for_i_tbrake(i, t_mean, t_std, N, Tsim = 15.0, dt= 0.004):
-    vals = fetch_data()
+def vmax_for_i_tbrake(i, t_mean, t_std, N, Tsim = 15.0, dt= 0.004, eps = 1e-2):
+    vals = get_values()
 
     t_draws = sample_t_brake(t_mean, t_std, N)
-
-    v_test = np.arange(0.5, 5.0, 0.5)
 
     v_max_ms = np.empty(N, dtype=float)
 
     for k, t_b in enumerate(t_draws):
-        v_max_ms[k] = find_vmax(i, float(t_b), vals, v_test, Tsim, dt)
+        v_max_ms[k] = compute_vmax_tbrake(i, float(t_b), Tsim, dt, vals, eps=eps)
 
     return pd.DataFrame({
         "i": i,

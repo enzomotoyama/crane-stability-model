@@ -58,15 +58,15 @@ This project also helps **evaluate the conservatism** of the ISO 4305 norm, whic
 ├── parameters.py        # Contains crane configuration (COG, mass, etc.)
 ├── forces.py            # Computes braking force & dynamics
 ├── monte_carlo_sim.py   # Monte Carlo simulation logic
-├── create_database.py   # Computes & stores vmax per config
+├── create_database.py   # Computes vmax per config (tables `analysis` by s_brake, `analysis_time` by t_brake)
 ├── plotting.py          # Visualization functions
 ├── crane_vmax.sqlite    # SQLite database of results
 └── README.md            # This file
 📈 Sample Output
 text
 Copy code
-i=0, R=10.0 m, s_b=1.0 m : vmax=1.706 m/s (6.14 km/h)
-i=1, R=11.0 m, s_b=1.0 m : vmax=1.689 m/s (6.08 km/h)
+i=0, R=10.0 m, s_brake=1.0 : vmax=1.613 m/s (5.81 km/h)
+i=1, R=11.0 m, s_brake=1.0 : vmax=1.583 m/s (5.70 km/h)
 ...
 ⚙️ Requirements
 Python 3.x

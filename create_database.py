@@ -2,41 +2,20 @@
 This script simulates crane tipping conditions under braking.
 It uses parameters inspired by a real engineering project at Tadano.
 For confidentiality reasons, all numerical data has been modified.
+
+Two tables are (re)generated in the database:
+    - analysis      : vmax as a function of the braking distance s_brake
+    - analysis_time : vmax as a function of the braking time t_brake
 """
 
 import sqlite3
 import numpy as np
+from parameters import get_values, DB_PATH
 from forces import make_F, rk4
 
-def fetch_data():
-    x_cog = np.array([3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0], dtype=float)
-    z_cog = np.array([30.0, 28.8, 27.6, 26.5, 25.4, 24.4, 23.5, 22.6, 21.8, 21.0, 20.3], dtype=float)
-    radius = np.array([10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], dtype=float)
-
-    width = 10.0
-    mass_list = 1000 * np.array([250, 225, 200, 180, 165, 150, 135, 122, 110, 99, 89])
-    mass_structure = np.ones(len(mass_list)) * 1000 * (750 - 250)
-    mass_total = mass_structure + mass_list
-
-    g = 9.81
-    a0 = width / 2.0 - x_cog
-    h0 = z_cog
-    IT = mass_total * (a0 ** 2 + h0 ** 2)
-
-    return {
-        "x_cog": x_cog,
-        "z_cog": z_cog,
-        "radius": radius,
-        "width": width,
-        "mass_total": mass_total,
-        "g": g,
-        "IT": IT
-    }
-
-def tipping_time(i, v0, t_brake, Tsim, dt, vals):
-    s_eff = 0.5 * v0 * t_brake
+def tips(i, v0, s_brake, Tsim, dt, vals):
     F = make_F(
-        s_eff,
+        s_brake,
         vals["IT"][i],
         vals["mass_total"][i],
         v0,
@@ -48,11 +27,13 @@ def tipping_time(i, v0, t_brake, Tsim, dt, vals):
     *_, t_tip = rk4(F, dt, Tsim, vals["x_cog"][i], vals["z_cog"][i], vals["width"])
     return t_tip is not None
 
-def compute_vmax_tbrake(i, t_brake, Tsim, dt, vals, v_sup=10.0, eps=1e-3):
-    def tip(v):
-        return tipping_time(i, v, t_brake, Tsim, dt, vals)
+def tipping_time(i, v0, t_brake, Tsim, dt, vals):
+    # constant deceleration : s = v0 * t / 2
+    s_eff = 0.5 * v0 * t_brake
+    return tips(i, v0, s_eff, Tsim, dt, vals)
 
-    low = 0.05
+def compute_vmax(tip, v_sup=10.0, eps=1e-3):
+    low = 0.0
     up = 0.1
     while up < v_sup and not tip(up):
         low = up
@@ -68,43 +49,53 @@ def compute_vmax_tbrake(i, t_brake, Tsim, dt, vals, v_sup=10.0, eps=1e-3):
             low = mid
     return low
 
-def main():
-    vals = fetch_data()
-    dt = 0.001
-    Tsim = 5.0
-    T_grid = np.arange(1, 2.1, 0.5)
+def compute_vmax_tbrake(i, t_brake, Tsim, dt, vals, v_sup=10.0, eps=1e-3):
+    return compute_vmax(lambda v: tipping_time(i, v, t_brake, Tsim, dt, vals), v_sup, eps)
 
-    conn = sqlite3.connect("data/crane_vmax.sqlite")
-    cur = conn.cursor()
+def compute_vmax_sbrake(i, s_brake, Tsim, dt, vals, v_sup=10.0, eps=1e-3):
+    return compute_vmax(lambda v: tips(i, v, s_brake, Tsim, dt, vals), v_sup, eps)
 
-    cur.execute("DROP TABLE IF EXISTS analysis_time")
-    cur.execute("""
-        CREATE TABLE analysis_time(
+def fill_table(cur, table, column, grid, compute, vals, Tsim, dt):
+    cur.execute(f"DROP TABLE IF EXISTS {table}")
+    cur.execute(f"""
+        CREATE TABLE {table}(
             i INTEGER,
             radius REAL,
-            t_brake REAL,
+            {column} REAL,
             vmax_ms REAL,
             vmax_kmh REAL,
-            PRIMARY KEY (i, t_brake)
+            PRIMARY KEY (i, {column})
         )
     """)
-    conn.commit()
 
     for i in range(len(vals["radius"])):
         R = vals["radius"][i]
-        for t_b in T_grid:
-            vmax = compute_vmax_tbrake(i, t_b, Tsim, dt, vals)
+        for x in grid:
+            vmax = compute(i, float(x), Tsim, dt, vals)
             cur.execute(
-                "INSERT OR REPLACE INTO analysis_time(i, radius, t_brake, vmax_ms, vmax_kmh) "
+                f"INSERT OR REPLACE INTO {table}(i, radius, {column}, vmax_ms, vmax_kmh) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (i, R, t_b, vmax, 3.6 * vmax)
+                (i, R, float(x), vmax, 3.6 * vmax)
             )
             print(
-                f"i={i}, R={R:.1f} m, t_b={t_b:.1f} s : "
+                f"i={i}, R={R:.1f} m, {column}={x:.1f} : "
                 f"vmax={vmax:.3f} m/s ({3.6 * vmax:.2f} km/h)"
             )
 
-        conn.commit()
+def main():
+    vals = get_values()
+    dt = 0.001
+    Tsim = 5.0
+    S_grid = np.arange(0.5, 10.01, 0.5)
+    T_grid = np.arange(1, 2.1, 0.5)
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    fill_table(cur, "analysis", "s_brake", S_grid, compute_vmax_sbrake, vals, Tsim, dt)
+    conn.commit()
+    fill_table(cur, "analysis_time", "t_brake", T_grid, compute_vmax_tbrake, vals, Tsim, dt)
+    conn.commit()
 
     conn.close()
     print("done")
